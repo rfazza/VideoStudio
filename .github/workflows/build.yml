@@ -1,0 +1,61 @@
+name: Cloud Build (Windows & Mac)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-mac:
+    name: Build macOS (Unsigned)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build macOS App
+        env:
+          # Menonaktifkan Code Signing Apple agar build berhasil tanpa sertifikat berbayar
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run electron-build-mac
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoStudio-macOS
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Windows App
+        run: npm run electron-build
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoStudio-Windows
+          path: dist-electron/*.exe

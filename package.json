@@ -1,0 +1,147 @@
+{
+  "name": "remotion-new",
+  "version": "1.0.0",
+  "description": "My Remotion video",
+  "repository": {},
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@remotion/bundler": "4.0.450",
+    "@remotion/cli": "4.0.450",
+    "@remotion/media-parser": "4.0.450",
+    "@remotion/media-utils": "4.0.450",
+    "@remotion/player": "4.0.450",
+    "@remotion/renderer": "4.0.450",
+    "@remotion/studio": "4.0.450",
+    "@remotion/studio-server": "4.0.450",
+    "@remotion/studio-shared": "4.0.450",
+    "@remotion/tailwind-v4": "4.0.450",
+    "@remotion/web-renderer": "4.0.450",
+    "@remotion/zod-types": "4.0.450",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.450",
+    "sucrase": "^3.35.1",
+    "tailwindcss": "4.0.0",
+    "zod": "^4.3.6",
+    "electron-is-dev": "^2.0.0"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.450",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/web": "0.0.166",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "9.19.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3",
+    "vite": "^8.0.9",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0",
+    "concurrently": "^8.2.2"
+  },
+  "overrides": {
+    "remotion": "4.0.450",
+    "@remotion/player": "4.0.450",
+    "@remotion/cli": "4.0.450",
+    "@remotion/renderer": "4.0.450",
+    "@remotion/bundler": "4.0.450",
+    "@remotion/media-utils": "4.0.450",
+    "@remotion/studio": "4.0.450",
+    "@remotion/studio-server": "4.0.450",
+    "@remotion/studio-shared": "4.0.450",
+    "@remotion/media-parser": "4.0.450",
+    "@remotion/web-renderer": "4.0.450",
+    "@remotion/zod-types": "4.0.450",
+    "@remotion/compositor-win32-x64-msvc": "4.0.450",
+    "@remotion/streaming": "4.0.450",
+    "@remotion/licensing": "4.0.450"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "custom-studio": "vite",
+    "render-server": "node render-server.js",
+    "build": "remotion bundle",
+    "build-ui": "vite build",
+    "upgrade": "remotion upgrade",
+    "lint": "eslint src && tsc",
+    "electron-dev": "concurrently \"npm run custom-studio\" \"npm run render-server\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-build": "npm run build-ui && electron-builder",
+    "electron-build-mac": "npm run build-ui && electron-builder --mac"
+  },
+  "main": "electron-main.js",
+  "build": {
+    "appId": "com.zzrco.videostudio",
+    "productName": "VideoStudio",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "public/icon.icns"
+    },
+    "win": {
+      "icon": "public/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "VideoStudio Setup.${ext}"
+    },
+    "nsis": {
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "uninstallDisplayName": "VideoStudio - By zzrco",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false
+    },
+    "extraResources": [
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "render-server.js",
+        "to": "render-server.js"
+      },
+      {
+        "from": "src",
+        "to": "src"
+      },
+      {
+        "from": "node_modules",
+        "to": "node_modules"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "electron-main.js",
+      "preload.js",
+      "package.json"
+    ]
+
+
+  },
+  "sideEffects": [
+    "*.css"
+  ]
+}
