@@ -1,6 +1,6 @@
 {
   "name": "zzrco-videostudio",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "ZZRCO VideoStudio",
   "repository": {},
   "license": "UNLICENSED",
@@ -8,6 +8,8 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@remotion/bundler": "4.0.450",
+    "@rspack/core": "1.7.6",
+    "@rspack/binding": "1.7.6",
     "@remotion/cli": "4.0.450",
     "@remotion/media-parser": "4.0.450",
     "@remotion/media-utils": "4.0.450",
@@ -70,8 +72,8 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "electron-dev": "concurrently \"npm run custom-studio\" \"npm run render-server\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron-build": "npm run build-ui && electron-builder",
-    "electron-build-mac": "npm run build-ui && electron-builder --mac",
+    "electron-build": "npx rimraf dist-electron && npm run build-ui && electron-builder",
+    "electron-build-mac": "npx rimraf dist-electron && npm run build-ui && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps"
   },
   "main": "electron-main.js",
@@ -83,7 +85,7 @@
     },
     "asarUnpack": [
       "**/*.node",
-      "node_modules/@rspack/binding/**/*"
+      "**/node_modules/@rspack/binding/**/*"
     ],
     "mac": {
       "category": "public.app-category.video",
