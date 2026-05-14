@@ -1,6 +1,6 @@
 {
   "name": "zzrco-videostudio",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "ZZRCO VideoStudio",
   "repository": {},
   "license": "UNLICENSED",
@@ -71,7 +71,8 @@
     "lint": "eslint src && tsc",
     "electron-dev": "concurrently \"npm run custom-studio\" \"npm run render-server\" \"wait-on http://localhost:5173 && electron .\"",
     "electron-build": "npm run build-ui && electron-builder",
-    "electron-build-mac": "npm run build-ui && electron-builder --mac"
+    "electron-build-mac": "npm run build-ui && electron-builder --mac",
+    "postinstall": "electron-builder install-app-deps"
   },
   "main": "electron-main.js",
   "build": {
@@ -80,8 +81,14 @@
     "directories": {
       "output": "dist-electron"
     },
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/@rspack/binding/**/*"
+    ],
     "mac": {
       "category": "public.app-category.video",
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
