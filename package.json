@@ -1,6 +1,6 @@
 {
   "name": "zzrco-videostudio",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "ZZRCO VideoStudio",
   "repository": {},
   "license": "UNLICENSED",
@@ -134,10 +134,6 @@
       "runAfterFinish": false
     },
     "extraResources": [
-      {
-        "from": "node_modules/@rspack/binding",
-        "to": "node_modules/@rspack/binding"
-      },
       {
         "from": "ffmpeg",
         "to": "ffmpeg",
