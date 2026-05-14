@@ -10,6 +10,13 @@ const fs = require("fs");
 const http = require("http");
 const { execSync } = require("child_process");
 
+// 0. FIX NATIVE BINDING RESOLUTION
+// Force Node.js module resolution to look inside app.asar.unpacked and resources root
+if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
+  module.paths.unshift(path.join(process.resourcesPath, "node_modules"));
+  module.paths.unshift(path.join(process.resourcesPath, "app.asar.unpacked", "node_modules"));
+}
+
 /**
  * REMOTION LOCAL RENDER BACKEND
  * 
