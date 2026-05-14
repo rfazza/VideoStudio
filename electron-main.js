@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { fork } = require('child_process');
+const { spawn } = require('child_process');
 
 // IPC Handlers
 ipcMain.handle('select-folder', async () => {
@@ -73,14 +73,15 @@ function startRenderServer() {
   logToFile(`✅ Launching Render Server from CWD: ${workingDir}`);
   logToFile(`✅ Server executable path: ${serverPath}`);
 
-  // Use fork with explicit environment and stdio piping
-  renderServerProcess = fork(serverPath, [], {
-    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  // Use spawn with process.execPath to avoid relying on system Node.js
+  renderServerProcess = spawn(process.execPath, [serverPath], {
+    stdio: ['ignore', 'pipe', 'pipe'],
     cwd: workingDir,
     env: { 
       ...process.env, 
       PORT: 3001, 
       IS_ELECTRON: 'true',
+      ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: isDev ? 'development' : 'production'
     }
   });

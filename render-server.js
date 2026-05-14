@@ -157,6 +157,24 @@ const server = http.createServer(async (req, res) => {
            }
         }
 
+        // Extra guard: Force chmod on all possible ffmpeg-static locations (for Remotion internal usage)
+        if (process.platform !== 'win32') {
+          const possibleFfmpegPaths = [
+            path.join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg"),
+            process.resourcesPath ? path.join(process.resourcesPath, "app", "node_modules", "ffmpeg-static", "ffmpeg") : null,
+            process.resourcesPath ? path.join(process.resourcesPath, "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg") : null
+          ].filter(Boolean);
+          
+          for (const p of possibleFfmpegPaths) {
+             if (fs.existsSync(p)) {
+                try { 
+                  fs.chmodSync(p, 0o755);
+                  console.log(`[Render] 🔐 Guard activated: Permissions granted for ${p}`);
+                } catch (e) {}
+             }
+          }
+        }
+
         // 6. Calculate dynamic bitrate based on resolution
         let bitrate = "8M";
         if (width >= 3840) bitrate = "25M";
