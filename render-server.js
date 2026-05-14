@@ -147,6 +147,14 @@ const server = http.createServer(async (req, res) => {
 
         if (ffmpegPath === "ffmpeg" || ffprobePath === "ffprobe") {
            console.warn(`[Render] ⚠️ WARNING: Bundled binaries not found. Falling back to system PATH.`);
+        } else if (process.platform !== "win32") {
+           try {
+              fs.chmodSync(ffmpegPath, 0o755);
+              fs.chmodSync(ffprobePath, 0o755);
+              console.log(`[Render] 🔐 Executable permissions (755) granted for Mac/Linux.`);
+           } catch (chmodErr) {
+              console.error(`[Render] ⚠️ Failed to grant permissions:`, chmodErr.message);
+           }
         }
 
         // 6. Calculate dynamic bitrate based on resolution
@@ -205,14 +213,24 @@ const server = http.createServer(async (req, res) => {
         const filename = `video-${timestamp}.mp4`;
 
         // Move to custom folder if requested
-        if (outputDir && fs.existsSync(outputDir)) {
-          const customPath = path.join(outputDir, filename);
-          console.log(`[Render] 🚚 Moving final asset to: ${customPath}`);
-          try {
-            fs.copyFileSync(finalMp4Path, customPath);
-            console.log(`[Render] ✅ Asset successfully moved to custom folder.`);
-          } catch (moveErr) {
-            console.error(`[Render] ❌ Failed to move asset: ${moveErr.message}`);
+        if (outputDir) {
+          if (!fs.existsSync(outputDir)) {
+             try {
+               fs.mkdirSync(outputDir, { recursive: true });
+               console.log(`[Render] 📂 Created custom output directory: ${outputDir}`);
+             } catch (mkdirErr) {
+               console.error(`[Render] ❌ Failed to create directory: ${mkdirErr.message}`);
+             }
+          }
+          if (fs.existsSync(outputDir)) {
+            const customPath = path.join(outputDir, filename);
+            console.log(`[Render] 🚚 Moving final asset to: ${customPath}`);
+            try {
+              fs.copyFileSync(finalMp4Path, customPath);
+              console.log(`[Render] ✅ Asset successfully moved to custom folder.`);
+            } catch (moveErr) {
+              console.error(`[Render] ❌ Failed to move asset: ${moveErr.message}`);
+            }
           }
         }
 
