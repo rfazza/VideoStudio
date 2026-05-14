@@ -3,7 +3,30 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-// 0. FIX NATIVE BINDING RESOLUTION FOR RSPACK
+// 0. ABSOLUTE FIX FOR NATIVE BINDING RESOLUTION
+const Module = require("module");
+const originalRequire = Module.prototype.require;
+
+Module.prototype.require = function(id) {
+  if (id === '@rspack/binding' && process.env.NODE_ENV !== 'development' && process.resourcesPath) {
+    let bindingPath;
+    try {
+      bindingPath = Module._resolveFilename(id, this);
+    } catch (e) {
+      bindingPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@rspack', 'binding', 'index.js');
+    }
+    
+    if (bindingPath && bindingPath.includes('app.asar') && !bindingPath.includes('app.asar.unpacked')) {
+      bindingPath = bindingPath.replace('app.asar', 'app.asar.unpacked');
+    }
+    
+    if (bindingPath) {
+      return originalRequire.call(this, bindingPath);
+    }
+  }
+  return originalRequire.apply(this, arguments);
+};
+
 // Force Node.js module resolution to look inside app.asar.unpacked and resources root
 if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
   module.paths.unshift(path.join(process.resourcesPath, "node_modules"));

@@ -3,19 +3,42 @@
  * Verified: 2026-04-23
  * Status: Production-Ready / Backend Frozen
  */
-const { bundle } = require("@remotion/bundler");
-const { getCompositions, renderMedia, RenderInternals } = require("@remotion/renderer");
 const path = require("path");
 const fs = require("fs");
-const http = require("http");
-const { execSync } = require("child_process");
 
-// 0. FIX NATIVE BINDING RESOLUTION
-// Force Node.js module resolution to look inside app.asar.unpacked and resources root
+// 0. ABSOLUTE FIX FOR NATIVE BINDING RESOLUTION
+const Module = require("module");
+const originalRequire = Module.prototype.require;
+
+Module.prototype.require = function(id) {
+  if (id === '@rspack/binding' && process.env.NODE_ENV !== 'development' && process.resourcesPath) {
+    let bindingPath;
+    try {
+      bindingPath = Module._resolveFilename(id, this);
+    } catch (e) {
+      bindingPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@rspack', 'binding', 'index.js');
+    }
+    
+    if (bindingPath && bindingPath.includes('app.asar') && !bindingPath.includes('app.asar.unpacked')) {
+      bindingPath = bindingPath.replace('app.asar', 'app.asar.unpacked');
+    }
+    
+    if (bindingPath) {
+      return originalRequire.call(this, bindingPath);
+    }
+  }
+  return originalRequire.apply(this, arguments);
+};
+
 if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
   module.paths.unshift(path.join(process.resourcesPath, "node_modules"));
   module.paths.unshift(path.join(process.resourcesPath, "app.asar.unpacked", "node_modules"));
 }
+
+const { bundle } = require("@remotion/bundler");
+const { getCompositions, renderMedia, RenderInternals } = require("@remotion/renderer");
+const http = require("http");
+const { execSync } = require("child_process");
 
 /**
  * REMOTION LOCAL RENDER BACKEND
