@@ -140,7 +140,7 @@
     },
     "extraResources": [
       {
-        "from": "ffmpeg",
+        "from": "src/ffmpeg",
         "to": "ffmpeg",
         "filter": [
           "**/*"
@@ -165,8 +165,6 @@
       "preload.js",
       "package.json"
     ]
-
-
   },
   "sideEffects": [
     "*.css"

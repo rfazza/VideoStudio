@@ -8,6 +8,5 @@ out
 
 # Build Outputs & Large Binaries
 dist-electron/
-ffmpeg/
 *.exe
 *.zip
