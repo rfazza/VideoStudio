@@ -99,7 +99,7 @@ function startRenderServer() {
     return;
   }
 
-  const workingDir = isDev ? __dirname : app.getPath('userData');
+  const workingDir = isDev ? __dirname : process.resourcesPath;
   logToFile(`✅ Launching Render Server from CWD: ${workingDir}`);
   logToFile(`✅ Server executable path: ${serverPath}`);
 
