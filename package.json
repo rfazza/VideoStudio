@@ -1,6 +1,6 @@
 {
   "name": "zzrco-videostudio",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "ZZRCO VideoStudio",
   "repository": {},
   "license": "UNLICENSED",
@@ -28,6 +28,11 @@
     "tailwindcss": "4.0.0",
     "zod": "^4.3.6",
     "electron-is-dev": "^2.0.0"
+  },
+  "optionalDependencies": {
+    "@rspack/binding-win32-x64-msvc": "1.7.6",
+    "@rspack/binding-darwin-arm64": "1.7.6",
+    "@rspack/binding-darwin-x64": "1.7.6"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.450",
@@ -86,7 +91,7 @@
     },
     "asarUnpack": [
       "**/*.node",
-      "**/node_modules/@rspack/binding/**/*"
+      "**/node_modules/@rspack/binding*/**/*"
     ],
     "mac": {
       "category": "public.app-category.video",

@@ -161,12 +161,16 @@ const server = http.createServer(async (req, res) => {
         
         const isPackaged = process.mainModule?.filename.includes('app.asar') || process.resourcesPath?.includes('app.asar') || (process.env.IS_ELECTRON === 'true' && !process.env.NODE_ENV);
         
+        const isWin = process.platform === 'win32';
+        const ffmpegBin = isWin ? "ffmpeg.exe" : "ffmpeg";
+        const ffprobeBin = isWin ? "ffprobe.exe" : "ffprobe";
+
         // Use path.join for cross-platform stability
-        const localFfmpeg = path.join(__dirname, "ffmpeg", "ffmpeg.exe");
-        const localFfprobe = path.join(__dirname, "ffmpeg", "ffprobe.exe");
+        const localFfmpeg = path.join(__dirname, "ffmpeg", ffmpegBin);
+        const localFfprobe = path.join(__dirname, "ffmpeg", ffprobeBin);
         
-        const prodFfmpeg = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", "ffmpeg.exe") : localFfmpeg;
-        const prodFfprobe = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", "ffprobe.exe") : localFfprobe;
+        const prodFfmpeg = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", ffmpegBin) : localFfmpeg;
+        const prodFfprobe = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", ffprobeBin) : localFfprobe;
 
         // Final Resolution
         ffmpegPath = fs.existsSync(prodFfmpeg) ? prodFfmpeg : (fs.existsSync(localFfmpeg) ? localFfmpeg : "ffmpeg");
