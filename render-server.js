@@ -64,7 +64,7 @@ let isBundling = false;
 const server = http.createServer(async (req, res) => {
   // CORS Support for local studio communication
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -76,7 +76,7 @@ const server = http.createServer(async (req, res) => {
   // 2. Handle Health Check
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", timestamp: Date.now(), cached: !!cachedBundleLocation }));
+    res.end(JSON.stringify({ status: "online", timestamp: Date.now(), cached: !!cachedBundleLocation }));
     return;
   }
 
