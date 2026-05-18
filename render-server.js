@@ -157,27 +157,24 @@ const server = http.createServer(async (req, res) => {
         if (!composition) throw new Error("DynamicRender composition not found in Root.tsx");
 
         // 5. Resolve Binary Paths (Robust Electron Support)
-        let ffmpegPath, ffprobePath;
-        
-        const isPackaged = process.mainModule?.filename.includes('app.asar') || process.resourcesPath?.includes('app.asar') || (process.env.IS_ELECTRON === 'true' && !process.env.NODE_ENV);
-        
         const isWin = process.platform === 'win32';
         const ffmpegBin = isWin ? "ffmpeg.exe" : "ffmpeg";
         const ffprobeBin = isWin ? "ffprobe.exe" : "ffprobe";
-
-        // Use path.join for cross-platform stability
-        const localFfmpeg = path.join(__dirname, "ffmpeg", ffmpegBin);
-        const localFfprobe = path.join(__dirname, "ffmpeg", ffprobeBin);
         
-        const prodFfmpeg = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", ffmpegBin) : localFfmpeg;
-        const prodFfprobe = process.resourcesPath ? path.join(process.resourcesPath, "ffmpeg", ffprobeBin) : localFfprobe;
+        let ffmpegPath = path.join(__dirname, "ffmpeg", ffmpegBin);
+        let ffprobePath = path.join(__dirname, "ffmpeg", ffprobeBin);
+        
+        if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
+           ffmpegPath = path.join(process.resourcesPath, "ffmpeg", ffmpegBin);
+           ffprobePath = path.join(process.resourcesPath, "ffmpeg", ffprobeBin);
+        }
 
-        // Final Resolution
-        ffmpegPath = fs.existsSync(prodFfmpeg) ? prodFfmpeg : (fs.existsSync(localFfmpeg) ? localFfmpeg : "ffmpeg");
-        ffprobePath = fs.existsSync(prodFfprobe) ? prodFfprobe : (fs.existsSync(localFfprobe) ? localFfprobe : "ffprobe");
-
+        if (!fs.existsSync(ffmpegPath)) {
+           console.error(`[Render] CRITICAL: Bundled FFmpeg NOT FOUND at ${ffmpegPath}`);
+           if (process.env.NODE_ENV === 'development') ffmpegPath = "ffmpeg";
+        }
+        
         console.log(`[Render] Resolved FFmpeg: ${ffmpegPath}`);
-        console.log(`[Render] Resolved FFprobe: ${ffprobePath}`);
 
         if (ffmpegPath === "ffmpeg" || ffprobePath === "ffprobe") {
            console.warn(`[Render] ⚠️ WARNING: Bundled binaries not found. Falling back to system PATH.`);
