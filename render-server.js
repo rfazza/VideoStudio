@@ -239,10 +239,23 @@ const server = http.createServer(async (req, res) => {
         console.log(`[Render] Step 2/2: Enforcing Final Bitrate via FFmpeg...`);
         const encodeStart = Date.now();
         try {
-          // Force bitrate using CBR-like settings (minrate = maxrate)
-          const ffmpegCmd = `"${ffmpegPath}" -i "${tempMp4Path}" -c:v libx264 -b:v ${bitrate} -minrate ${bitrate} -maxrate ${bitrate} -bufsize ${parseInt(bitrate)*2}M -pix_fmt yuv420p -preset medium -r ${fps} -x264-params nal-hrd=cbr:force-cfr=1 -y "${finalMp4Path}"`;
+          const { execFileSync } = require("child_process");
           
-          execSync(ffmpegCmd, { stdio: "ignore" });
+          const args = [
+            "-i", tempMp4Path,
+            "-c:v", "libx264",
+            "-b:v", bitrate,
+            "-minrate", bitrate,
+            "-maxrate", bitrate,
+            "-bufsize", `${parseInt(bitrate)*2}M`,
+            "-pix_fmt", "yuv420p",
+            "-preset", "medium",
+            "-r", fps.toString(),
+            "-x264-params", "nal-hrd=cbr:force-cfr=1",
+            "-y", finalMp4Path
+          ];
+          
+          execFileSync(ffmpegPath, args, { stdio: "ignore" });
           const encodeEnd = Date.now();
           console.log(`[Render] Step 2 Complete (Time: ${((encodeEnd - encodeStart) / 1000).toFixed(2)}s)`);
         } catch (e) {
