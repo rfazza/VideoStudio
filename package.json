@@ -1,6 +1,6 @@
 {
   "name": "zzrco-videostudio",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "ZZRCO VideoStudio",
   "repository": {},
   "license": "UNLICENSED",
@@ -76,7 +76,7 @@
     "build-ui": "vite build",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
-    "electron-dev": "concurrently \"npm run custom-studio\" \"npm run render-server\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-dev": "concurrently \"npm run custom-studio\" \"wait-on http://localhost:5173 && electron .\"",
     "electron-build": "npx rimraf dist-electron && npm run build-ui && electron-builder",
     "electron-build-mac": "npx rimraf dist-electron && npm run build-ui && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps"

@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const payload = JSON.parse(body);
-        const { code, fps, durationInFrames, aspectRatio, outputDir, bitrate: frontendBitrate, resolution } = payload;
+        const { code, fps, durationInFrames, aspectRatio, outputDir, bitrate: frontendBitrate, resolution, preset } = payload;
 
         // 1. Force explicit dimensions based on aspectRatio to fix black bars
         let finalWidth = payload.width || 1920;
@@ -214,15 +214,25 @@ const server = http.createServer(async (req, res) => {
             bitrate += 'M'; // Default to Mbps if just a number
           }
         } else {
-          if (width >= 3840 || height >= 2160) {
-            bitrate = "30M"; // Preset 4K
-          } else if (width >= 2500 || height >= 1400) {
-            bitrate = "16M"; // Preset 2K
-          } else if (width >= 1920 || height >= 1080) {
-            bitrate = "8M";  // Preset 1080p
+          // 1. Paksa parsing ke Number untuk mengantisipasi data String dari frontend
+          const numWidth = parseInt(width, 10) || 0;
+          const numHeight = parseInt(height, 10) || 0;
+          const presetName = String(preset || resolution || "").toLowerCase();
+
+          // 2. Evaluasi bertingkat yang sensitif terhadap Width ATAU Height ATAU preset name
+          if (numWidth >= 3840 || numHeight >= 2160 || presetName.includes("4k") || presetName.includes("2160")) {
+            bitrate = "30M"; // Target 4K (File harus besar dan padat)
+          } else if (numWidth >= 2500 || numHeight >= 1400 || presetName.includes("2k") || presetName.includes("1440") || presetName.includes("2560") || presetName.includes("1400")) {
+            bitrate = "16M"; // Target 2K (Biar tembus ukuran belasan MB seperti semula)
+          } else if (numWidth >= 1920 || numHeight >= 1080 || presetName.includes("1080") || presetName.includes("hd")) {
+            bitrate = "8M";  // Target 1080p
           } else {
-            bitrate = "4M";
+            bitrate = "4M";  // Di bawah 1080p
           }
+
+          // 3. Tambahkan Log Debug murni ke terminal agar kita bisa melacak pergerakannya saat testing
+          console.log(`[DEBUG BITRATE] Incoming -> width: ${width} (${typeof width}), height: ${height} (${typeof height}), resolution: ${resolution} (${typeof resolution}), preset: ${preset} (${typeof preset})`);
+          console.log(`[DEBUG BITRATE] Parsed -> numWidth: ${numWidth}, numHeight: ${numHeight}, presetName: ${presetName} -> SELECTED BITRATE: ${bitrate}`);
         }
         
         // Ensure bufsize calculation handles 'M' or 'k' correctly
