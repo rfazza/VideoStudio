@@ -10,7 +10,7 @@ const fs = require("fs");
 const Module = require("module");
 const originalRequire = Module.prototype.require;
 
-Module.prototype.require = function(id) {
+Module.prototype.require = function (id) {
   if (id === '@rspack/binding' && process.env.NODE_ENV !== 'development' && process.resourcesPath) {
     let bindingPath;
     try {
@@ -18,11 +18,11 @@ Module.prototype.require = function(id) {
     } catch (e) {
       bindingPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@rspack', 'binding', 'index.js');
     }
-    
+
     if (bindingPath && bindingPath.includes('app.asar') && !bindingPath.includes('app.asar.unpacked')) {
       bindingPath = bindingPath.replace('app.asar', 'app.asar.unpacked');
     }
-    
+
     if (bindingPath) {
       return originalRequire.call(this, bindingPath);
     }
@@ -84,17 +84,18 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && req.url === "/render") {
     let body = "";
     req.on("data", chunk => { body += chunk; });
-    
+
     req.on("end", async () => {
       try {
         const payload = JSON.parse(body);
         const { code, fps, durationInFrames, aspectRatio, outputDir, bitrate: frontendBitrate, resolution, preset } = payload;
 
-        // 1. Force explicit dimensions based on aspectRatio to fix black bars
+        // 1. Ambil data asli dari frontend, gunakan fallback 1920x1080 hanya jika kosong murni!
         let finalWidth = payload.width || 1920;
         let finalHeight = payload.height || 1080;
-        
-        if (aspectRatio) {
+
+        // HANYA TIMPA DIMENSI JIKA payload.width & payload.height TIDAK DIKIRIM (mencegah override preset 2K/4K)
+        if (aspectRatio && !payload.width && !payload.height) {
           const ratio = aspectRatio.toUpperCase();
           if (ratio === 'PORTRAIT') {
             finalWidth = 1080;
@@ -107,7 +108,7 @@ const server = http.createServer(async (req, res) => {
             finalHeight = 1080;
           }
         }
-        
+
         const width = finalWidth;
         const height = finalHeight;
 
@@ -120,7 +121,7 @@ const server = http.createServer(async (req, res) => {
         // 3. Bundle the Remotion project (Cached)
         let bundleLocation;
         const bundleStart = Date.now();
-        
+
         if (cachedBundleLocation) {
           console.log(`[Render] Using cached Remotion bundle`);
           bundleLocation = cachedBundleLocation;
@@ -160,32 +161,32 @@ const server = http.createServer(async (req, res) => {
         const isWin = process.platform === 'win32';
         const ffmpegBin = isWin ? "ffmpeg.exe" : "ffmpeg";
         const ffprobeBin = isWin ? "ffprobe.exe" : "ffprobe";
-        
+
         let ffmpegPath = path.join(__dirname, "ffmpeg", ffmpegBin);
         let ffprobePath = path.join(__dirname, "ffmpeg", ffprobeBin);
-        
+
         if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
-           ffmpegPath = path.join(process.resourcesPath, "ffmpeg", ffmpegBin);
-           ffprobePath = path.join(process.resourcesPath, "ffmpeg", ffprobeBin);
+          ffmpegPath = path.join(process.resourcesPath, "ffmpeg", ffmpegBin);
+          ffprobePath = path.join(process.resourcesPath, "ffmpeg", ffprobeBin);
         }
 
         if (!fs.existsSync(ffmpegPath)) {
-           console.error(`[Render] CRITICAL: Bundled FFmpeg NOT FOUND at ${ffmpegPath}`);
-           if (process.env.NODE_ENV === 'development') ffmpegPath = "ffmpeg";
+          console.error(`[Render] CRITICAL: Bundled FFmpeg NOT FOUND at ${ffmpegPath}`);
+          if (process.env.NODE_ENV === 'development') ffmpegPath = "ffmpeg";
         }
-        
+
         console.log(`[Render] Resolved FFmpeg: ${ffmpegPath}`);
 
         if (ffmpegPath === "ffmpeg" || ffprobePath === "ffprobe") {
-           console.warn(`[Render] ⚠️ WARNING: Bundled binaries not found. Falling back to system PATH.`);
+          console.warn(`[Render] ⚠️ WARNING: Bundled binaries not found. Falling back to system PATH.`);
         } else if (process.platform !== "win32") {
-           try {
-              fs.chmodSync(ffmpegPath, 0o755);
-              fs.chmodSync(ffprobePath, 0o755);
-              console.log(`[Render] 🔐 Executable permissions (755) granted for Mac/Linux.`);
-           } catch (chmodErr) {
-              console.error(`[Render] ⚠️ Failed to grant permissions:`, chmodErr.message);
-           }
+          try {
+            fs.chmodSync(ffmpegPath, 0o755);
+            fs.chmodSync(ffprobePath, 0o755);
+            console.log(`[Render] 🔐 Executable permissions (755) granted for Mac/Linux.`);
+          } catch (chmodErr) {
+            console.error(`[Render] ⚠️ Failed to grant permissions:`, chmodErr.message);
+          }
         }
 
         // Extra guard: Force chmod on all possible ffmpeg-static locations (for Remotion internal usage)
@@ -195,14 +196,14 @@ const server = http.createServer(async (req, res) => {
             process.resourcesPath ? path.join(process.resourcesPath, "app", "node_modules", "ffmpeg-static", "ffmpeg") : null,
             process.resourcesPath ? path.join(process.resourcesPath, "app.asar.unpacked", "node_modules", "ffmpeg-static", "ffmpeg") : null
           ].filter(Boolean);
-          
+
           for (const p of possibleFfmpegPaths) {
-             if (fs.existsSync(p)) {
-                try { 
-                  fs.chmodSync(p, 0o755);
-                  console.log(`[Render] 🔐 Guard activated: Permissions granted for ${p}`);
-                } catch (e) {}
-             }
+            if (fs.existsSync(p)) {
+              try {
+                fs.chmodSync(p, 0o755);
+                console.log(`[Render] 🔐 Guard activated: Permissions granted for ${p}`);
+              } catch (e) { }
+            }
           }
         }
 
@@ -234,7 +235,7 @@ const server = http.createServer(async (req, res) => {
           console.log(`[DEBUG BITRATE] Incoming -> width: ${width} (${typeof width}), height: ${height} (${typeof height}), resolution: ${resolution} (${typeof resolution}), preset: ${preset} (${typeof preset})`);
           console.log(`[DEBUG BITRATE] Parsed -> numWidth: ${numWidth}, numHeight: ${numHeight}, presetName: ${presetName} -> SELECTED BITRATE: ${bitrate}`);
         }
-        
+
         // Ensure bufsize calculation handles 'M' or 'k' correctly
         const isKbps = bitrate.toLowerCase().endsWith('k');
         const bitrateNum = parseInt(bitrate);
@@ -269,7 +270,7 @@ const server = http.createServer(async (req, res) => {
         const encodeStart = Date.now();
         try {
           const { execFileSync } = require("child_process");
-          
+
           const args = [
             "-i", tempMp4Path,
             "-c:v", "libx264",
@@ -283,7 +284,7 @@ const server = http.createServer(async (req, res) => {
             "-x264-params", "nal-hrd=cbr:force-cfr=1",
             "-y", finalMp4Path
           ];
-          
+
           execFileSync(ffmpegPath, args, { stdio: "ignore" });
           const encodeEnd = Date.now();
           console.log(`[Render] Step 2 Complete (Time: ${((encodeEnd - encodeStart) / 1000).toFixed(2)}s)`);
@@ -298,7 +299,7 @@ const server = http.createServer(async (req, res) => {
 
         // Cleanup temporary intermediate
         if (fs.existsSync(tempMp4Path)) {
-          try { fs.unlinkSync(tempMp4Path); } catch (e) {}
+          try { fs.unlinkSync(tempMp4Path); } catch (e) { }
         }
 
         const filename = `video-${timestamp}.mp4`;
@@ -306,12 +307,12 @@ const server = http.createServer(async (req, res) => {
         // Move to custom folder if requested
         if (outputDir) {
           if (!fs.existsSync(outputDir)) {
-             try {
-               fs.mkdirSync(outputDir, { recursive: true });
-               console.log(`[Render] 📂 Created custom output directory: ${outputDir}`);
-             } catch (mkdirErr) {
-               console.error(`[Render] ❌ Failed to create directory: ${mkdirErr.message}`);
-             }
+            try {
+              fs.mkdirSync(outputDir, { recursive: true });
+              console.log(`[Render] 📂 Created custom output directory: ${outputDir}`);
+            } catch (mkdirErr) {
+              console.error(`[Render] ❌ Failed to create directory: ${mkdirErr.message}`);
+            }
           }
           if (fs.existsSync(outputDir)) {
             const customPath = path.join(outputDir, filename);
@@ -328,7 +329,7 @@ const server = http.createServer(async (req, res) => {
         // 7. Inspect actual encoded bitrate using ffprobe (Truthful Check)
         const stat = fs.statSync(finalMp4Path);
         const fileSizeMB = (stat.size / (1024 * 1024)).toFixed(2);
-        
+
         let actualBitrate = "Unable to verify";
         try {
           const probe = execSync(
@@ -338,7 +339,7 @@ const server = http.createServer(async (req, res) => {
           if (probe && !isNaN(probe)) {
             actualBitrate = (parseInt(probe) / 1000000).toFixed(2) + " Mbps";
           }
-        } catch (e) {}
+        } catch (e) { }
 
         console.log(`\n[Render] ✅ Success! Production Asset Ready.`);
         console.log(`[Render] 📐 Resolution: ${width}x${height} | ${fps} FPS`);
@@ -352,7 +353,7 @@ const server = http.createServer(async (req, res) => {
           "Content-Disposition": `attachment; filename="${filename}"`,
           "Access-Control-Expose-Headers": "Content-Disposition"
         });
-        
+
         const cleanup = () => {
           console.log("[Render] 🧹 Cleaning up internal renders folder...");
           try {
@@ -378,14 +379,14 @@ const server = http.createServer(async (req, res) => {
         console.error(`\n[Render] ❌ Render Failed:`, e.message);
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ success: false, error: e.message }));
-        
+
         // Manual cleanup on error since finish might not behave same way
         try {
           const files = fs.readdirSync(rendersDir);
           for (const file of files) {
             fs.unlinkSync(path.join(rendersDir, file));
           }
-        } catch (err) {}
+        } catch (err) { }
       }
     });
   } else {
