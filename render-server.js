@@ -1,6 +1,6 @@
 /**
- * REMOTION RENDER SERVER — STABLE BASELINE v1.5
- * Verified: 2026-04-23
+ * REMOTION RENDER SERVER — STABLE BASELINE v1.1.7
+ * Verified: 2026-05-21
  * Status: Production-Ready / Backend Frozen
  */
 const path = require("path");
@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const payload = JSON.parse(body);
-        const { code, fps, durationInFrames, aspectRatio, outputDir } = payload;
+        const { code, fps, durationInFrames, aspectRatio, outputDir, bitrate: frontendBitrate, resolution } = payload;
 
         // 1. Force explicit dimensions based on aspectRatio to fix black bars
         let finalWidth = payload.width || 1920;
@@ -207,9 +207,28 @@ const server = http.createServer(async (req, res) => {
         }
 
         // 6. Calculate dynamic bitrate based on resolution
-        let bitrate = "8M";
-        if (width >= 3840) bitrate = "25M";
-        else if (width >= 2560) bitrate = "12M";
+        let bitrate = "8M"; // Default 1080p
+        if (frontendBitrate) {
+          bitrate = String(frontendBitrate);
+          if (!bitrate.toLowerCase().endsWith('m') && !bitrate.toLowerCase().endsWith('k')) {
+            bitrate += 'M'; // Default to Mbps if just a number
+          }
+        } else {
+          if (width >= 3840 || height >= 2160) {
+            bitrate = "30M"; // Preset 4K
+          } else if (width >= 2500 || height >= 1400) {
+            bitrate = "16M"; // Preset 2K
+          } else if (width >= 1920 || height >= 1080) {
+            bitrate = "8M";  // Preset 1080p
+          } else {
+            bitrate = "4M";
+          }
+        }
+        
+        // Ensure bufsize calculation handles 'M' or 'k' correctly
+        const isKbps = bitrate.toLowerCase().endsWith('k');
+        const bitrateNum = parseInt(bitrate);
+        const bufsize = `${bitrateNum * 2}${isKbps ? 'k' : 'M'}`;
 
         const timestamp = Date.now();
         const tempMp4Path = path.join(rendersDir, `temp-${timestamp}.mp4`);
@@ -247,7 +266,7 @@ const server = http.createServer(async (req, res) => {
             "-b:v", bitrate,
             "-minrate", bitrate,
             "-maxrate", bitrate,
-            "-bufsize", `${parseInt(bitrate)*2}M`,
+            "-bufsize", bufsize,
             "-pix_fmt", "yuv420p",
             "-preset", "medium",
             "-r", fps.toString(),
