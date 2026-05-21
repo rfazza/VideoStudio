@@ -90,11 +90,11 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body);
         const { code, fps, durationInFrames, aspectRatio, outputDir, bitrate: frontendBitrate, resolution, preset } = payload;
 
-        // 1. Ambil data asli dari frontend, gunakan fallback 1920x1080 hanya jika kosong murni!
+        // 1. Ambil data resolusi asli dari frontend, gunakan fallback hanya jika kosong murni!
         let finalWidth = payload.width || 1920;
         let finalHeight = payload.height || 1080;
 
-        // HANYA TIMPA DIMENSI JIKA payload.width & payload.height TIDAK DIKIRIM (mencegah override preset 2K/4K)
+        // HANYA timpa dimensi jika payload.width & payload.height TIDAK DIKIRIM (Mencegah override preset 2K/4K)
         if (aspectRatio && !payload.width && !payload.height) {
           const ratio = aspectRatio.toUpperCase();
           if (ratio === 'PORTRAIT') {
@@ -222,13 +222,15 @@ const server = http.createServer(async (req, res) => {
 
           // 2. Evaluasi bertingkat yang sensitif terhadap Width ATAU Height ATAU preset name
           if (numWidth >= 3840 || numHeight >= 2160 || presetName.includes("4k") || presetName.includes("2160")) {
-            bitrate = "30M"; // Target 4K (File harus besar dan padat)
-          } else if (numWidth >= 2500 || numHeight >= 1400 || presetName.includes("2k") || presetName.includes("1440") || presetName.includes("2560") || presetName.includes("1400")) {
-            bitrate = "16M"; // Target 2K (Biar tembus ukuran belasan MB seperti semula)
+            bitrate = "30M"; // Target 4K
+          } else if (numWidth >= 2500 || numHeight >= 1400 || presetName.includes("2k") || presetName.includes("1440") || presetName.includes("2560")) {
+            bitrate = "16M"; // Target 2K (Biar tembus belasan MB seperti semula!)
           } else if (numWidth >= 1920 || numHeight >= 1080 || presetName.includes("1080") || presetName.includes("hd")) {
             bitrate = "8M";  // Target 1080p
+          } else if (numWidth > 0) {
+            bitrate = "4M";  // Low-res
           } else {
-            bitrate = "4M";  // Di bawah 1080p
+            bitrate = "16M"; // ULTIMATE SAFETY: Jika deteksi payload gagal total, paksa 16M agar 2K/4K tidak kempes di 4.58MB!
           }
 
           // 3. Tambahkan Log Debug murni ke terminal agar kita bisa melacak pergerakannya saat testing

@@ -806,8 +806,9 @@ ${editorCode}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: compiledCode,
-          width: currentW,
-          height: currentH,
+          width: resolved.width,
+          height: resolved.height,
+          preset: settings.preset,
           fps: resolved.fps,
           durationInFrames: resolved.durationInFrames,
           aspectRatio: settings.aspectRatio,
