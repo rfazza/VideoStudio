@@ -61,6 +61,9 @@ if (!fs.existsSync(rendersDir)) {
 let cachedBundleLocation = null;
 let isBundling = false;
 
+// Global state for batch tracking
+const batchJobs = {};
+
 const server = http.createServer(async (req, res) => {
   // CORS Support for local studio communication
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -80,7 +83,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. Handle Render Request
+  // 3. Handle Batch Status Request
+  if (req.method === "GET" && req.url.startsWith("/batch-status")) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const jobId = url.searchParams.get("jobId");
+    if (!jobId || !batchJobs[jobId]) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Job not found" }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(batchJobs[jobId]));
+    return;
+  }
+
+  // 4. Handle Render Request
   if (req.method === "POST" && req.url === "/render") {
     let body = "";
     req.on("data", chunk => { body += chunk; });
@@ -389,6 +406,155 @@ const server = http.createServer(async (req, res) => {
             fs.unlinkSync(path.join(rendersDir, file));
           }
         } catch (err) { }
+      }
+    });
+  } else if (req.method === "POST" && req.url === "/render-batch") {
+    let body = "";
+    req.on("data", chunk => { body += chunk; });
+
+    req.on("end", async () => {
+      try {
+        const payload = JSON.parse(body);
+        const { code, fps, durationInFrames, aspectRatio, outputDir, batchItems, preset, width, height } = payload;
+        
+        if (!code || !batchItems || !Array.isArray(batchItems) || batchItems.length === 0) {
+           throw new Error("Invalid payload: missing code or batchItems");
+        }
+
+        const jobId = `batch_${Date.now()}`;
+        batchJobs[jobId] = {
+           status: "queued",
+           total: batchItems.length,
+           current: 0,
+           progress: 0,
+           message: "Batch received. Starting..."
+        };
+
+        // Fire and forget response
+        res.writeHead(202, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, jobId, message: "Batch processing started" }));
+
+        // Background Processing
+        (async () => {
+          let finalWidth = width || 1920;
+          let finalHeight = height || 1080;
+
+          if (aspectRatio && !width && !height) {
+            const ratio = aspectRatio.toUpperCase();
+            if (ratio === 'PORTRAIT') {
+              finalWidth = 1080;
+              finalHeight = 1920;
+            } else if (ratio === 'SQUARE') {
+              finalWidth = 1080;
+              finalHeight = 1080;
+            } else {
+              finalWidth = 1920;
+              finalHeight = 1080;
+            }
+          }
+
+          let bundleLocation;
+          try {
+             if (cachedBundleLocation) {
+                bundleLocation = cachedBundleLocation;
+             } else {
+                if (isBundling) {
+                   while (isBundling) await new Promise(resolve => setTimeout(resolve, 500));
+                   bundleLocation = cachedBundleLocation;
+                } else {
+                   isBundling = true;
+                   const entry = path.join(__dirname, "src/index.ts");
+                   bundleLocation = await bundle(entry);
+                   cachedBundleLocation = bundleLocation;
+                   isBundling = false;
+                }
+             }
+
+             const isWin = process.platform === 'win32';
+             const ffmpegBin = isWin ? "ffmpeg.exe" : "ffmpeg";
+             let ffmpegPath = path.join(__dirname, "ffmpeg", ffmpegBin);
+             if (process.env.NODE_ENV !== 'development' && process.resourcesPath) {
+               ffmpegPath = path.join(process.resourcesPath, "ffmpeg", ffmpegBin);
+             }
+             if (!fs.existsSync(ffmpegPath) && process.env.NODE_ENV === 'development') ffmpegPath = "ffmpeg";
+
+             let bitrate = "16M";
+             const numW = parseInt(finalWidth, 10) || 0;
+             const numH = parseInt(finalHeight, 10) || 0;
+             const pName = String(preset || "").toLowerCase();
+             if (numW >= 3840 || numH >= 2160 || pName.includes("4k") || pName.includes("2160")) bitrate = "30M";
+             else if (numW >= 2500 || numH >= 1400 || pName.includes("2k") || pName.includes("1440") || pName.includes("2560")) bitrate = "16M";
+             else if (numW >= 1920 || numH >= 1080 || pName.includes("1080") || pName.includes("hd")) bitrate = "8M";
+             else if (numW > 0) bitrate = "4M";
+             
+             const bufsize = `${parseInt(bitrate) * 2}M`;
+
+             for (let i = 0; i < batchItems.length; i++) {
+                batchJobs[jobId].current = i + 1;
+                batchJobs[jobId].status = "rendering";
+                batchJobs[jobId].progress = 0;
+                batchJobs[jobId].message = `Rendering item ${i + 1} of ${batchItems.length}...`;
+
+                const item = batchItems[i];
+                let itemCode = code;
+                if (item.text) itemCode = itemCode.replaceAll("BATCH_TEXT_PLACEHOLDER", item.text);
+                if (item.colorA) itemCode = itemCode.replaceAll("BATCH_COLOR_A", item.colorA);
+                if (item.colorB) itemCode = itemCode.replaceAll("BATCH_COLOR_B", item.colorB);
+
+                const comps = await getCompositions(bundleLocation, {
+                   inputProps: { code: itemCode, width: finalWidth, height: finalHeight, fps, durationInFrames, aspectRatio }
+                });
+
+                const composition = comps.find((c) => c.id === "DynamicRender");
+                if (!composition) throw new Error("Composition not found");
+
+                const ts = Date.now();
+                const tempPath = path.join(rendersDir, `temp_batch_${jobId}_${i}_${ts}.mp4`);
+                const finalPath = path.join(rendersDir, `video_batch_${i+1}_${ts}.mp4`);
+
+                await renderMedia({
+                   composition,
+                   serveUrl: bundleLocation,
+                   codec: "h264",
+                   outputLocation: tempPath,
+                   inputProps: { code: itemCode, width: finalWidth, height: finalHeight, fps, durationInFrames, aspectRatio },
+                   crf: 10,
+                   onProgress: ({ progress }) => {
+                      batchJobs[jobId].progress = Math.round(progress * 50);
+                   }
+                });
+
+                batchJobs[jobId].message = `Enforcing bitrate for item ${i + 1}...`;
+                batchJobs[jobId].progress = 75; // Arbitrary progress
+                const { execFileSync } = require("child_process");
+                const args = ["-i", tempPath, "-c:v", "libx264", "-b:v", bitrate, "-minrate", bitrate, "-maxrate", bitrate, "-bufsize", bufsize, "-pix_fmt", "yuv420p", "-preset", "medium", "-r", fps.toString(), "-x264-params", "nal-hrd=cbr:force-cfr=1", "-y", finalPath];
+                execFileSync(ffmpegPath, args, { stdio: "ignore" });
+
+                if (fs.existsSync(tempPath)) {
+                   try { fs.unlinkSync(tempPath); } catch (e) { }
+                }
+
+                if (outputDir) {
+                   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+                   const customPath = path.join(outputDir, `batch_item_${i+1}_${ts}.mp4`);
+                   fs.copyFileSync(finalPath, customPath);
+                }
+                
+                batchJobs[jobId].progress = 100;
+             }
+
+             batchJobs[jobId].status = "completed";
+             batchJobs[jobId].progress = 100;
+             batchJobs[jobId].message = "All batch items processed successfully.";
+          } catch (error) {
+             batchJobs[jobId].status = "error";
+             batchJobs[jobId].message = error.message;
+          }
+        })();
+
+      } catch (e) {
+         res.writeHead(500, { "Content-Type": "application/json" });
+         res.end(JSON.stringify({ success: false, error: e.message }));
       }
     });
   } else {

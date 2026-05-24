@@ -357,6 +357,16 @@ export const Studio: React.FC = () => {
   const [renderStepStatus, setRenderStepStatus] = useState<"rendering" | "completed" | "error" | "idle">("idle");
   const [renderError, setRenderError] = useState<string | null>(null);
 
+  // Batch Configurator State
+  const [activePanel, setActivePanel] = useState<"editor" | "batch">("editor");
+  const [batchTab, setBatchTab] = useState<"text" | "media" | "gradient">("text");
+  const [batchTextInput, setBatchTextInput] = useState("Episode 1: The Beginning\nEpisode 2: The Rising\nEpisode 3: The Finale");
+  const [batchMediaInput, setBatchMediaInput] = useState("");
+  const [batchColorA, setBatchColorA] = useState("#3b82f6");
+  const [batchColorB, setBatchColorB] = useState("#2563eb");
+  const [batchJobId, setBatchJobId] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<any>(null);
+
   // License State
   const [license, setLicense] = useState<{
     key: string;
@@ -409,6 +419,30 @@ export const Studio: React.FC = () => {
     const interval = setInterval(checkBackend, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  // Batch Polling
+  useEffect(() => {
+    let interval: any;
+    if (batchJobId) {
+       interval = setInterval(async () => {
+         try {
+           const res = await fetch(`http://localhost:3001/batch-status?jobId=${batchJobId}`);
+           if (res.ok) {
+             const data = await res.json();
+             setBatchStatus(data);
+             setRenderProgress(data.progress || 0);
+             setRenderLogs([data.message || `Processing item ${data.current} of ${data.total}`]);
+             if (data.status === "completed" || data.status === "error") {
+                clearInterval(interval);
+                setRenderStepStatus(data.status);
+                setBatchJobId(null);
+             }
+           }
+         } catch (e) { }
+       }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [batchJobId]);
 
   // 1. Initial Load from Storage
   useEffect(() => {
@@ -856,6 +890,60 @@ ${editorCode}
     }
   };
 
+  const handleBatchRender = async () => {
+    if (isRendering) return;
+    if (!license.isActive) {
+      alert("License required");
+      return;
+    }
+    setRenderStepStatus("rendering");
+    setRenderProgress(0);
+    setRenderLogs(["Preparing batch processing..."]);
+    
+    let batchItems: any[] = [];
+    if (batchTab === "text") {
+       const texts = batchTextInput.split('\n').map(t => t.trim()).filter(Boolean);
+       if (texts.length === 0) { alert("Please input texts"); setRenderStepStatus("idle"); return; }
+       batchItems = texts.map(t => ({ text: t }));
+    } else if (batchTab === "gradient") {
+       batchItems = [
+         { colorA: batchColorA, colorB: batchColorB },
+         { colorA: batchColorB, colorB: batchColorA }
+       ];
+    } else if (batchTab === "media") {
+       batchItems = [{ search: batchMediaInput || "nature" }, { search: batchMediaInput || "city" }];
+    }
+
+    try {
+      const response = await fetch("http://localhost:3001/render-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: compiledCode,
+          width: resolved.width,
+          height: resolved.height,
+          preset: settings.preset,
+          fps: resolved.fps,
+          durationInFrames: resolved.durationInFrames,
+          aspectRatio: settings.aspectRatio,
+          outputDir: settings.outputDir,
+          batchItems
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Batch render failed to start");
+      }
+
+      const data = await response.json();
+      setBatchJobId(data.jobId);
+    } catch (e: any) {
+      setRenderError(e.message);
+      setRenderStepStatus("error");
+      setRenderLogs([`Error: ${e.message}`]);
+    }
+  };
+
   const RuntimePreview = useMemo(() => {
     return (props: any) => {
       try {
@@ -904,7 +992,12 @@ ${editorCode}
             remainingDays={remainingDays}
           />
           <div className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4 px-2">Production</div>
-          <SidebarItem label="Component Logic" active />
+          <div onClick={() => setActivePanel("editor")}>
+            <SidebarItem label="Component Logic" active={activePanel === "editor"} />
+          </div>
+          <div onClick={() => setActivePanel("batch")}>
+            <SidebarItem label="Batch Configurator" active={activePanel === "batch"} />
+          </div>
           <SidebarItem label="Asset Library" />
           <div className="h-px bg-white/5 my-4 mx-2" />
           <div className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4 px-2">Output</div>
@@ -1050,6 +1143,70 @@ ${editorCode}
                   </div>
                 )}
               </div>
+              ) : activePanel === "batch" ? (
+              <div className="w-1/2 border-r border-white/5 flex flex-col bg-[#02040a]">
+                <div className="h-10 bg-slate-900/20 border-b border-white/5 px-6 flex items-center shrink-0">
+                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">Batch Configurator Panel</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                   <div className="flex gap-2">
+                     <button onClick={() => setBatchTab("text")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "text" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Batch Text</button>
+                     <button onClick={() => setBatchTab("media")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "media" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Media Search</button>
+                     <button onClick={() => setBatchTab("gradient")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "gradient" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Pure Gradient</button>
+                   </div>
+                   
+                   {batchTab === "text" && (
+                     <InputField label="Input List Teks (Pisahkan dengan baris baru)">
+                        <textarea 
+                           value={batchTextInput}
+                           onChange={e => setBatchTextInput(e.target.value)}
+                           className="w-full h-40 bg-slate-800 border border-white/10 rounded-xl p-4 text-[11px] font-mono text-slate-300 focus:border-blue-500/50 outline-none"
+                           placeholder={"Contoh:\nTitle 1\nTitle 2\nTitle 3"}
+                        />
+                        <p className="text-[9px] text-slate-500 mt-2">Placeholder <code>BATCH_TEXT_PLACEHOLDER</code> pada kode editor akan diganti secara sekuensial dengan teks di atas.</p>
+                     </InputField>
+                   )}
+
+                   {batchTab === "media" && (
+                     <InputField label="Kata Kunci Smart Media Search">
+                        <input 
+                           type="text"
+                           value={batchMediaInput}
+                           onChange={e => setBatchMediaInput(e.target.value)}
+                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-[11px] font-bold text-slate-300 focus:border-blue-500/50 outline-none"
+                           placeholder="Contoh: neon city, abstract geometry..."
+                        />
+                     </InputField>
+                   )}
+
+                   {batchTab === "gradient" && (
+                     <div className="space-y-4">
+                        <InputField label="Color A (BATCH_COLOR_A)">
+                           <input type="color" value={batchColorA} onChange={e => setBatchColorA(e.target.value)} className="w-full h-10 rounded cursor-pointer" />
+                        </InputField>
+                        <InputField label="Color B (BATCH_COLOR_B)">
+                           <input type="color" value={batchColorB} onChange={e => setBatchColorB(e.target.value)} className="w-full h-10 rounded cursor-pointer" />
+                        </InputField>
+                     </div>
+                   )}
+
+                   <button 
+                     onClick={handleBatchRender}
+                     disabled={!!batchJobId || renderStepStatus === "rendering"}
+                     className={`w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-xl mt-4 flex justify-center items-center gap-3 ${
+                        (!!batchJobId || renderStepStatus === "rendering") ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] text-white"
+                     }`}
+                   >
+                      {(!!batchJobId || renderStepStatus === "rendering") ? (
+                        <>
+                           <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                           {batchStatus ? \`RENDERING \${batchStatus.current} OF \${batchStatus.total}...\` : "STARTING BATCH..."}
+                        </>
+                      ) : "START BATCH RENDER"}
+                   </button>
+                </div>
+              </div>
+              ) : null}
 
               {/* Panel Tengah (Baru): Preview + AI Chat */}
               <div className="flex-1 flex flex-col bg-slate-950">
