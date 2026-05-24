@@ -1096,6 +1096,7 @@ ${editorCode}
           {showEditor ? (
             <>
               {/* Panel Kiri: Editor */}
+              {activePanel === "editor" ? (
               <div className="w-1/2 border-r border-white/5 flex flex-col bg-[#02040a]">
                 <div className="h-10 bg-slate-900/20 border-b border-white/5 px-6 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-3">
@@ -1200,7 +1201,7 @@ ${editorCode}
                       {(!!batchJobId || renderStepStatus === "rendering") ? (
                         <>
                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                           {batchStatus ? \`RENDERING \${batchStatus.current} OF \${batchStatus.total}...\` : "STARTING BATCH..."}
+                           {batchStatus ? `RENDERING ${batchStatus.current} OF ${batchStatus.total}...` : "STARTING BATCH..."}
                         </>
                       ) : "START BATCH RENDER"}
                    </button>
