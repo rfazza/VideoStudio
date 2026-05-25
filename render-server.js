@@ -415,16 +415,16 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const payload = JSON.parse(body);
-        const { code, fps, durationInFrames, aspectRatio, outputDir, batchItems, preset, width, height } = payload;
+        const { codes, fps, durationInFrames, aspectRatio, outputDir, preset, width, height } = payload;
         
-        if (!code || !batchItems || !Array.isArray(batchItems) || batchItems.length === 0) {
-           throw new Error("Invalid payload: missing code or batchItems");
+        if (!codes || !Array.isArray(codes) || codes.length === 0) {
+           throw new Error("Invalid payload: missing codes array");
         }
 
         const jobId = `batch_${Date.now()}`;
         batchJobs[jobId] = {
            status: "queued",
-           total: batchItems.length,
+           total: codes.length,
            current: 0,
            progress: 0,
            message: "Batch received. Starting..."
@@ -489,17 +489,13 @@ const server = http.createServer(async (req, res) => {
              
              const bufsize = `${parseInt(bitrate) * 2}M`;
 
-             for (let i = 0; i < batchItems.length; i++) {
+             for (let i = 0; i < codes.length; i++) {
                 batchJobs[jobId].current = i + 1;
                 batchJobs[jobId].status = "rendering";
                 batchJobs[jobId].progress = 0;
-                batchJobs[jobId].message = `Rendering item ${i + 1} of ${batchItems.length}...`;
+                batchJobs[jobId].message = `Rendering tab ${i + 1} of ${codes.length}...`;
 
-                const item = batchItems[i];
-                let itemCode = code;
-                if (item.text) itemCode = itemCode.replaceAll("BATCH_TEXT_PLACEHOLDER", item.text);
-                if (item.colorA) itemCode = itemCode.replaceAll("BATCH_COLOR_A", item.colorA);
-                if (item.colorB) itemCode = itemCode.replaceAll("BATCH_COLOR_B", item.colorB);
+                const itemCode = codes[i];
 
                 const comps = await getCompositions(bundleLocation, {
                    inputProps: { code: itemCode, width: finalWidth, height: finalHeight, fps, durationInFrames, aspectRatio }
@@ -510,7 +506,7 @@ const server = http.createServer(async (req, res) => {
 
                 const ts = Date.now();
                 const tempPath = path.join(rendersDir, `temp_batch_${jobId}_${i}_${ts}.mp4`);
-                const finalPath = path.join(rendersDir, `video_batch_${i+1}_${ts}.mp4`);
+                const finalPath = path.join(rendersDir, `video_tab_${i+1}_${ts}.mp4`);
 
                 await renderMedia({
                    composition,
@@ -536,7 +532,7 @@ const server = http.createServer(async (req, res) => {
 
                 if (outputDir) {
                    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-                   const customPath = path.join(outputDir, `batch_item_${i+1}_${ts}.mp4`);
+                   const customPath = path.join(outputDir, `video_tab_${i+1}_${ts}.mp4`);
                    fs.copyFileSync(finalPath, customPath);
                 }
                 

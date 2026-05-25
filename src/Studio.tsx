@@ -340,7 +340,11 @@ export const Studio: React.FC = () => {
     aiModel: "gemini-2.0-flash",
   });
 
-  const [editorCode, setEditorCode] = useState(INITIAL_RUNTIME_CODE);
+  // Multi-Tab Editor State
+  const [editorTabs, setEditorTabs] = useState([{ id: `tab_${Date.now()}`, name: "Video 1", code: INITIAL_RUNTIME_CODE }]);
+  const [activeTabId, setActiveTabId] = useState(editorTabs[0].id);
+  const activeEditorCode = useMemo(() => editorTabs.find(t => t.id === activeTabId)?.code || INITIAL_RUNTIME_CODE, [editorTabs, activeTabId]);
+
   const [compiledCode, setCompiledCode] = useState(INITIAL_RUNTIME_CODE);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"synced" | "dirty" | "error">("synced");
@@ -357,13 +361,7 @@ export const Studio: React.FC = () => {
   const [renderStepStatus, setRenderStepStatus] = useState<"rendering" | "completed" | "error" | "idle">("idle");
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  // Batch Configurator State
-  const [activePanel, setActivePanel] = useState<"editor" | "batch">("editor");
-  const [batchTab, setBatchTab] = useState<"text" | "media" | "gradient">("text");
-  const [batchTextInput, setBatchTextInput] = useState("Episode 1: The Beginning\nEpisode 2: The Rising\nEpisode 3: The Finale");
-  const [batchMediaInput, setBatchMediaInput] = useState("");
-  const [batchColorA, setBatchColorA] = useState("#3b82f6");
-  const [batchColorB, setBatchColorB] = useState("#2563eb");
+  // Batch Polling State
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [batchStatus, setBatchStatus] = useState<any>(null);
 
@@ -451,7 +449,14 @@ export const Studio: React.FC = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.editorCode) setEditorCode(parsed.editorCode);
+        if (parsed.editorTabs) {
+          setEditorTabs(parsed.editorTabs);
+          if (parsed.activeTabId) setActiveTabId(parsed.activeTabId);
+        } else if (parsed.editorCode) {
+          const defaultId = `tab_${Date.now()}`;
+          setEditorTabs([{ id: defaultId, name: "Video 1", code: parsed.editorCode }]);
+          setActiveTabId(defaultId);
+        }
         if (parsed.compiledCode) setCompiledCode(parsed.compiledCode);
         if (parsed.settings) {
           setSettings(prev => ({
@@ -552,8 +557,9 @@ export const Studio: React.FC = () => {
       setSaveStatus("saving");
       try {
         const payload = {
-          version: 1,
-          editorCode,
+          version: 2,
+          editorTabs,
+          activeTabId,
           compiledCode,
           settings,
           isLooping,
@@ -568,7 +574,7 @@ export const Studio: React.FC = () => {
       }
     }, 1500);
     return () => clearTimeout(timeout);
-  }, [editorCode, compiledCode, settings, isLooping, showEditor]);
+  }, [editorTabs, activeTabId, compiledCode, settings, isLooping, showEditor]);
 
   const updateSetting = <K extends keyof VideoSettings>(key: K, value: VideoSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
@@ -624,13 +630,43 @@ export const Studio: React.FC = () => {
     }
   };
 
-  const applyChanges = () => applyChangesCore(editorCode);
+  const applyChanges = () => applyChangesCore(activeEditorCode);
+
+  const handleTabClick = (tabId: string) => {
+    setActiveTabId(tabId);
+    const code = editorTabs.find(t => t.id === tabId)?.code;
+    if (code) {
+      applyChangesCore(code);
+    }
+  };
 
   const resetEditor = () => {
-    setEditorCode(INITIAL_RUNTIME_CODE);
+    setEditorTabs(tabs => tabs.map(t => t.id === activeTabId ? { ...t, code: INITIAL_RUNTIME_CODE } : t));
     setCompiledCode(INITIAL_RUNTIME_CODE);
     setError(null);
     setStatus("synced");
+  };
+
+  const addNewTab = () => {
+    const newId = `tab_${Date.now()}`;
+    setEditorTabs(tabs => [...tabs, { id: newId, name: `Video ${tabs.length + 1}`, code: INITIAL_RUNTIME_CODE }]);
+    setActiveTabId(newId);
+  };
+
+  const handleDeleteTab = (e: React.MouseEvent, tabIdToDelete: string) => {
+    e.stopPropagation();
+    if (editorTabs.length <= 1) return;
+    
+    const idx = editorTabs.findIndex(t => t.id === tabIdToDelete);
+    if (idx === 0) return; // Prevent deleting Video 1
+    
+    const newTabs = editorTabs.filter(t => t.id !== tabIdToDelete);
+    
+    if (activeTabId === tabIdToDelete) {
+      const nextIdx = idx >= newTabs.length ? newTabs.length - 1 : idx;
+      setActiveTabId(newTabs[nextIdx].id);
+    }
+    setEditorTabs(newTabs);
   };
 
   const resetToDefault = () => {
@@ -667,7 +703,7 @@ ATURAN KETAT:
 
 Konteks Kode Saat Ini:
 \`\`\`tsx
-${editorCode}
+${activeEditorCode}
 \`\`\``;
 
     while (!success && attempts < maxAttempts) {
@@ -732,7 +768,8 @@ ${editorCode}
         const codeMatch = responseText.match(/```(?:tsx?|jsx?|javascript|typescript)?\s*([\s\S]*?)```/);
         const extractedCode = codeMatch ? codeMatch[1].trim() : responseText.trim();
 
-        setEditorCode(extractedCode);
+        setEditorTabs(tabs => tabs.map(t => t.id === activeTabId ? { ...t, code: extractedCode } : t));
+        setStatus("dirty");
         setMessages(prev => {
           const newMsgs = [...prev];
           newMsgs.pop();
@@ -768,29 +805,7 @@ ${editorCode}
     }
   };
 
-  const exportJson = () => {
-    const payload = {
-      version: 1,
-      name: "Video_Export_" + Date.now(),
-      code: compiledCode,
-      settings: {
-        width: currentW,
-        height: currentH,
-        fps: resolved.fps,
-        durationInFrames: resolved.durationInFrames,
-        aspectRatio: settings.aspectRatio,
-      },
-      exportedAt: new Date().toISOString()
-    };
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${payload.name}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   const handleRender = async () => {
     if (isRendering) return;
@@ -900,18 +915,11 @@ ${editorCode}
     setRenderProgress(0);
     setRenderLogs(["Preparing batch processing..."]);
     
-    let batchItems: any[] = [];
-    if (batchTab === "text") {
-       const texts = batchTextInput.split('\n').map(t => t.trim()).filter(Boolean);
-       if (texts.length === 0) { alert("Please input texts"); setRenderStepStatus("idle"); return; }
-       batchItems = texts.map(t => ({ text: t }));
-    } else if (batchTab === "gradient") {
-       batchItems = [
-         { colorA: batchColorA, colorB: batchColorB },
-         { colorA: batchColorB, colorB: batchColorA }
-       ];
-    } else if (batchTab === "media") {
-       batchItems = [{ search: batchMediaInput || "nature" }, { search: batchMediaInput || "city" }];
+    const codes = editorTabs.map(t => t.code).filter(c => c.trim().length > 0);
+    if (codes.length === 0) {
+       alert("No codes to render.");
+       setRenderStepStatus("idle");
+       return;
     }
 
     try {
@@ -919,7 +927,6 @@ ${editorCode}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: compiledCode,
           width: resolved.width,
           height: resolved.height,
           preset: settings.preset,
@@ -927,7 +934,7 @@ ${editorCode}
           durationInFrames: resolved.durationInFrames,
           aspectRatio: settings.aspectRatio,
           outputDir: settings.outputDir,
-          batchItems
+          codes
         }),
       });
 
@@ -976,13 +983,22 @@ ${editorCode}
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans select-none">
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+      `}</style>
       {/* 1. Navigation Sidebar (Left) */}
       <aside className="w-64 border-r border-white/5 bg-slate-900/50 flex flex-col shrink-0">
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
           <img src="/icon.png" alt="Zzrco Logo" className="w-8 h-8 object-contain rounded-lg shadow-lg shadow-blue-900/30 bg-blue-600/20 border border-white/10" onError={(e) => { e.currentTarget.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%233b82f6"><path d="M4 4h16v2H4zm0 14h16v2H4zm2-10h12l-8 8h8v2H6l8-8H6z"/></svg>'; }} />
           <h1 className="text-xl font-black tracking-tighter text-blue-500">VideoStudio</h1>
         </div>
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
           <LicensePanel 
             license={license}
             licenseInput={licenseInput}
@@ -992,11 +1008,36 @@ ${editorCode}
             remainingDays={remainingDays}
           />
           <div className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em] mb-4 px-2">Production</div>
-          <div onClick={() => setActivePanel("editor")}>
-            <SidebarItem label="Component Logic" active={activePanel === "editor"} />
-          </div>
-          <div onClick={() => setActivePanel("batch")}>
-            <SidebarItem label="Batch Configurator" active={activePanel === "batch"} />
+          <div className="mb-4">
+            <SidebarItem label="BATCH PROJECT" active={true} />
+            <div className="flex flex-col gap-1 mt-2 pl-4 border-l border-white/5 ml-2">
+              {editorTabs.map((tab, idx) => (
+                <div 
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  className={`group flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${
+                    activeTabId === tab.id ? "bg-blue-600/20 text-blue-400" : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                  }`}
+                >
+                  <span className="truncate">{`Video ${idx + 1}`}</span>
+                  {idx !== 0 && (
+                     <button 
+                       onClick={(e) => handleDeleteTab(e, tab.id)} 
+                       className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 rounded-full hover:bg-white/10 transition-all flex items-center justify-center shrink-0 w-5 h-5"
+                       title="Remove Video"
+                     >
+                       ✕
+                     </button>
+                  )}
+                </div>
+              ))}
+              <button 
+                onClick={addNewTab} 
+                className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-widest font-black text-slate-500 hover:text-white transition-all bg-white/5 hover:bg-white/10 rounded-md justify-center border border-white/5 hover:border-white/10"
+              >
+                 ➕ Add New Video
+              </button>
+            </div>
           </div>
           <SidebarItem label="Asset Library" />
           <div className="h-px bg-white/5 my-4 mx-2" />
@@ -1065,7 +1106,20 @@ ${editorCode}
             )}
 
             <div className="flex items-center gap-4">
-              <button onClick={exportJson} className="px-4 py-2 bg-white/5 hover:bg-white/10 transition-all rounded-lg text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-widest border border-white/5">Export JSON</button>
+              <button 
+                onClick={handleBatchRender} 
+                disabled={!!batchJobId || renderStepStatus === "rendering" || backendStatus !== "online" || !license.isActive}
+                className={`px-4 py-2 transition-all rounded-lg text-[10px] font-black uppercase tracking-widest text-white shadow-lg flex items-center justify-center gap-2 ${
+                  (!!batchJobId || renderStepStatus === "rendering" || backendStatus !== "online" || !license.isActive) ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-105 shadow-blue-900/30"
+                }`}
+              >
+                {(!!batchJobId || renderStepStatus === "rendering") ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    {batchStatus ? `${batchStatus.current}/${batchStatus.total}` : "BATCH..."}
+                  </>
+                ) : `RENDER BATCH`}
+              </button>
               <button 
                 onClick={handleRender} 
                 disabled={isRendering || status === "error" || backendStatus !== "online" || !license.isActive}
@@ -1095,27 +1149,36 @@ ${editorCode}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {showEditor ? (
             <>
-              {/* Panel Kiri: Editor */}
-              {activePanel === "editor" ? (
-              <div className="w-1/2 border-r border-white/5 flex flex-col bg-[#02040a]">
-                <div className="h-10 bg-slate-900/20 border-b border-white/5 px-6 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-3">
-                     <span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">Runtime Buffer</span>
-                     <button onClick={() => setShowApiHelp(!showApiHelp)} className="text-[9px] font-black bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all">API Help</button>
+              {/* Panel Kiri: Multi-Tab Editor */}
+              <div className="w-1/2 border-r border-white/5 flex flex-col bg-[#1e1e1e]">
+                
+                {/* (Top Navbar removed to clean up Code Editor) */}
+
+                {/* 2. EDITOR TOOLBAR */}
+                <div className="h-10 bg-[#1e1e1e] border-b border-white/5 px-6 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                     <button onClick={() => setShowApiHelp(!showApiHelp)} className="text-[9px] font-black bg-blue-500/10 px-3 py-1.5 rounded border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all uppercase tracking-widest">
+                       API Help
+                     </button>
                   </div>
-                  <div className="flex items-center gap-6">
-                     <button onClick={resetEditor} className="text-[10px] font-black text-slate-500 hover:text-white transition-colors uppercase tracking-widest">Clear</button>
-                     <button onClick={applyChanges} disabled={status === "synced"} className={`text-[10px] font-black uppercase transition-all tracking-[0.2em] px-4 py-1.5 rounded-md ${status === "synced" ? "text-slate-800 bg-transparent" : "bg-blue-600/10 text-blue-400 border border-blue-500/20 hover:bg-blue-600/20 shadow-lg"}`}>
+                  <div className="flex items-center gap-4">
+                     <button onClick={resetEditor} className="text-[9px] font-black text-slate-500 hover:text-red-400 transition-colors uppercase tracking-widest">Clear</button>
+                     <div className="w-px h-4 bg-white/10"></div>
+                     <button onClick={applyChanges} disabled={status === "synced"} className={`text-[9px] font-black uppercase transition-all tracking-[0.2em] px-4 py-1.5 rounded-md ${status === "synced" ? "text-slate-600 bg-transparent" : "bg-blue-600/10 text-blue-400 border border-blue-500/20 hover:bg-blue-600/20 shadow-lg"}`}>
                        {lastApplied ? "BUFFER SYNCED" : "SYNC LOGIC"}
                      </button>
                   </div>
                 </div>
 
-                <div className="flex-1 relative group">
-                  <Editor height="100%" language="typescript" theme="vs-dark" value={editorCode} onMount={(e, m) => {
+                {/* 3. MONACO EDITOR */}
+                <div className="flex-1 relative group bg-[#1e1e1e]">
+                  <Editor height="100%" language="typescript" theme="vs-dark" value={activeEditorCode} onMount={(e, m) => {
                     m.languages.typescript.typescriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: true });
                     m.languages.typescript.typescriptDefaults.setExtraLibs([{ content: EDITOR_TYPES, filePath: "remotion-runtime.d.ts" }]);
-                  }} onChange={(v) => { setEditorCode(v || ""); setStatus("dirty"); }} options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", padding: { top: 20 }, fontFamily: "'JetBrains Mono', monospace", automaticLayout: true }} />
+                  }} onChange={(v) => { 
+                    setEditorTabs(tabs => tabs.map(t => t.id === activeTabId ? { ...t, code: v || "" } : t));
+                    setStatus("dirty"); 
+                  }} options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", padding: { top: 20 }, fontFamily: "'JetBrains Mono', monospace", automaticLayout: true }} />
                   {lastApplied && <div className="absolute top-6 right-8 bg-green-600 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-2xl animate-bounce pointer-events-none uppercase tracking-widest">Logic Injected</div>}
                   {showApiHelp && (
                     <div className="absolute top-0 left-0 w-full bg-slate-900/95 border-b border-white/10 p-8 z-50 backdrop-blur-md animate-in slide-in-from-top-4 duration-300 shadow-2xl">
@@ -1135,6 +1198,8 @@ ${editorCode}
                   )}
                 </div>
 
+
+
                 {status === "error" && error && (
                   <div className="bg-red-950/20 border-t border-red-500/20 p-6 flex flex-col gap-4 animate-in slide-in-from-bottom-4 duration-300 shrink-0">
                     <div className="bg-black/90 p-5 rounded-xl border border-red-500/20 font-mono text-[11px] text-red-200 whitespace-pre-wrap leading-relaxed shadow-inner">
@@ -1144,70 +1209,6 @@ ${editorCode}
                   </div>
                 )}
               </div>
-              ) : activePanel === "batch" ? (
-              <div className="w-1/2 border-r border-white/5 flex flex-col bg-[#02040a]">
-                <div className="h-10 bg-slate-900/20 border-b border-white/5 px-6 flex items-center shrink-0">
-                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-[0.2em]">Batch Configurator Panel</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                   <div className="flex gap-2">
-                     <button onClick={() => setBatchTab("text")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "text" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Batch Text</button>
-                     <button onClick={() => setBatchTab("media")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "media" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Media Search</button>
-                     <button onClick={() => setBatchTab("gradient")} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${batchTab === "gradient" ? "bg-blue-600 text-white" : "bg-white/5 text-slate-400"}`}>Pure Gradient</button>
-                   </div>
-                   
-                   {batchTab === "text" && (
-                     <InputField label="Input List Teks (Pisahkan dengan baris baru)">
-                        <textarea 
-                           value={batchTextInput}
-                           onChange={e => setBatchTextInput(e.target.value)}
-                           className="w-full h-40 bg-slate-800 border border-white/10 rounded-xl p-4 text-[11px] font-mono text-slate-300 focus:border-blue-500/50 outline-none"
-                           placeholder={"Contoh:\nTitle 1\nTitle 2\nTitle 3"}
-                        />
-                        <p className="text-[9px] text-slate-500 mt-2">Placeholder <code>BATCH_TEXT_PLACEHOLDER</code> pada kode editor akan diganti secara sekuensial dengan teks di atas.</p>
-                     </InputField>
-                   )}
-
-                   {batchTab === "media" && (
-                     <InputField label="Kata Kunci Smart Media Search">
-                        <input 
-                           type="text"
-                           value={batchMediaInput}
-                           onChange={e => setBatchMediaInput(e.target.value)}
-                           className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-[11px] font-bold text-slate-300 focus:border-blue-500/50 outline-none"
-                           placeholder="Contoh: neon city, abstract geometry..."
-                        />
-                     </InputField>
-                   )}
-
-                   {batchTab === "gradient" && (
-                     <div className="space-y-4">
-                        <InputField label="Color A (BATCH_COLOR_A)">
-                           <input type="color" value={batchColorA} onChange={e => setBatchColorA(e.target.value)} className="w-full h-10 rounded cursor-pointer" />
-                        </InputField>
-                        <InputField label="Color B (BATCH_COLOR_B)">
-                           <input type="color" value={batchColorB} onChange={e => setBatchColorB(e.target.value)} className="w-full h-10 rounded cursor-pointer" />
-                        </InputField>
-                     </div>
-                   )}
-
-                   <button 
-                     onClick={handleBatchRender}
-                     disabled={!!batchJobId || renderStepStatus === "rendering"}
-                     className={`w-full py-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-xl mt-4 flex justify-center items-center gap-3 ${
-                        (!!batchJobId || renderStepStatus === "rendering") ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] text-white"
-                     }`}
-                   >
-                      {(!!batchJobId || renderStepStatus === "rendering") ? (
-                        <>
-                           <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                           {batchStatus ? `RENDERING ${batchStatus.current} OF ${batchStatus.total}...` : "STARTING BATCH..."}
-                        </>
-                      ) : "START BATCH RENDER"}
-                   </button>
-                </div>
-              </div>
-              ) : null}
 
               {/* Panel Tengah (Baru): Preview + AI Chat */}
               <div className="flex-1 flex flex-col bg-slate-950">

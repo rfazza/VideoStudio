@@ -177,27 +177,38 @@ function createWindow() {
   });
 }
 
-app.on('ready', () => {
+app.whenReady().then(() => {
   startRenderServer();
   createWindow();
+
+  app.on('activate', () => {
+    if (mainWindow === null) {
+      createWindow();
+    }
+  });
 });
+
+const cleanupBackend = () => {
+  if (renderServerProcess) {
+    console.log('[Electron Main] Shutting down background services (render-server)...');
+    try {
+      renderServerProcess.kill('SIGINT');
+      renderServerProcess.kill('SIGTERM');
+      renderServerProcess.kill('SIGKILL');
+    } catch (e) {
+      console.log('[Electron Main] Error during background service shutdown:', e.message);
+    }
+    renderServerProcess = null;
+  }
+};
 
 // Ensure the background render server is killed when the app quits
 app.on('window-all-closed', () => {
+  cleanupBackend();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-app.on('before-quit', () => {
-  if (renderServerProcess) {
-    console.log('[Electron Main] Shutting down background services...');
-    renderServerProcess.kill();
-  }
-});
-
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
-});
+app.on('before-quit', cleanupBackend);
+app.on('quit', cleanupBackend);
